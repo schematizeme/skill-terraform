@@ -2,6 +2,8 @@
 
 > Regra mãe da casa (`schematize-infra → references/segredos.md`, `schematize-engineering`):
 > segredo **nunca** em repositório, **nunca** em log, **nunca** em claro onde não precisa estar.
+> Segredo que já foi commitado: tratar como vazado (revogar, rotacionar, limpar o histórico) —
+> `schematize-git → references/segredos.md`.
 > IaC é o lugar onde isso mais vaza, porque o state e o plan **guardam tudo**.
 
 ## 1. Os cinco vazamentos clássicos

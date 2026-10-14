@@ -3,7 +3,7 @@ name: schematize-terraform
 metadata:
   version: 0.2.0
 description: >-
-  IaC com OpenTofu e Terraform em paridade (uma ferramenta por repo): state cifrado, pins, módulos, plan->apply gated, drift. Use ao tocar *.tf, *.tofu, tofu, terraform, .terraform.lock.hcl ou state. Gate check-tf.sh.
+  IaC com OpenTofu e Terraform em paridade: state cifrado, pins, módulos, plan->apply gated, drift. Use ao tocar *.tf, *.tofu ou .terraform.lock.hcl. Gate check-tf.sh.
 ---
 <!-- cross-skill: isolamento.md, iac.md, iac-efeitos-externos.md, resiliencia.md, segredos.md -> schematize-infra -->
 
