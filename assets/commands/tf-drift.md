@@ -8,12 +8,13 @@ argument-hint: "<envs/ambiente | todos>"
 1. **Credencial somente leitura.** Drift se detecta sem poder escrever.
 2. Para cada raiz (`envs/${ARGUMENTS}`):
    ```bash
-   tofu init -input=false
-   tofu plan -input=false -lock=false -detailed-exitcode -no-color -var-file=<amb>.tfvars
+   TF=tofu   # ou: TF=terraform (a do repo)
+   $TF init -input=false
+   $TF plan -input=false -lock=false -detailed-exitcode -no-color -var-file=<amb>.tfvars
    # 0 = sem mudança · 2 = DRIFT · 1 = erro (tratar como falha do job, não como drift)
    ```
    `-lock=false` só aqui (leitura; não bloqueia um apply legítimo). Para ver só o que mudou fora do
-   código: `tofu plan -refresh-only`.
+   código: `$TF plan -refresh-only`.
 3. **Classifique cada diferença** (`references/fluxo.md` §4):
    - **mudança manual indevida** -> o código está certo: `apply` (por PR/CI) traz o mundo de volta;
    - **mudança manual legítima** -> vira código (PR) e o drift some;

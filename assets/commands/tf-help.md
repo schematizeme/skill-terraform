@@ -1,7 +1,7 @@
 ---
 description: Mapa da skill schematize-terraform (IaC declarativa em OpenTofu/Terraform — o state é a memória, o plan é o contrato).
 ---
-**schematize-terraform** — IaC com OpenTofu (default) e Terraform (por ADR).
+**schematize-terraform** — IaC com OpenTofu e Terraform, em paridade (uma ferramenta por repo; `$TF` = `tofu` ou `terraform`).
 
 | Comando | O que faz |
 |---|---|

@@ -21,6 +21,6 @@ Crie `modules/${ARGUMENTS}/` (`references/versoes-e-modulos.md` §2). Parta de
 5. **Saídas:** o mínimo, com `description`; `sensitive` se for segredo (e pergunte se precisa existir).
 6. **Teste** com `mock_provider` (`references/qualidade.md` §3): um `plan` válido + um
    `expect_failures` para cada `validation` — o vermelho primeiro.
-7. **Prove:** `tofu fmt`, `tofu init -backend=false`, `tofu validate`, `tofu test`, e
+7. **Prove** (`$TF` = `tofu` ou `terraform`, o do repo): `$TF fmt`, `$TF init -backend=false`, `$TF validate`, `$TF test`, e
    `bash .claude/skills/schematize-terraform/scripts/check-tf.sh .`. Diga o que não rodou.
-8. Se usar recurso exclusivo de OpenTofu (`enabled`, `encryption`), declare no README.
+8. Se usar recurso exclusivo de uma ferramenta (OpenTofu: `enabled`, `encryption`; Terraform: `actions`), declare no README e em `required_version`.

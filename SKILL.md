@@ -3,14 +3,14 @@ name: schematize-terraform
 metadata:
   version: 0.1.1
 description: >-
-  IaC com OpenTofu/Terraform: raízes por ambiente, state remoto com lock e criptografia, pins, módulos, segredos,
-  plan->apply gated, drift, testes e política. Use ao tocar *.tf, *.tfvars, state ou módulo. Gate check-tf.sh.
+  IaC com OpenTofu e Terraform em paridade (uma ferramenta por repo): state cifrado, pins, módulos, plan->apply gated, drift. Use ao tocar *.tf, *.tofu, tofu, terraform, .terraform.lock.hcl ou state. Gate check-tf.sh.
 ---
 <!-- cross-skill: isolamento.md, iac.md, iac-efeitos-externos.md, resiliencia.md, segredos.md -> schematize-infra -->
 
-# IaC com Terraform e OpenTofu (schematize-terraform)
+# IaC com OpenTofu e Terraform (schematize-terraform)
 
-Disciplina normativa para **infraestrutura declarada em HCL**. A tese: **o state é a memória da
+Disciplina normativa para **infraestrutura declarada em HCL**, com **OpenTofu e Terraform em
+paridade** (cada repo escolhe uma; o nome da skill é histórico). A tese: **o state é a memória da
 infra e o `plan` é o contrato** — quem aplica sem ler o plan, ou guarda o state onde qualquer um
 lê, ou deixa o ambiente de produção a um `workspace select` de distância do de teste, está a um
 comando do incidente. Esta skill é a especialista de IaC; a `schematize-infra` é a visão de
@@ -74,8 +74,10 @@ plataforma.
 ## Como usar
 
 1. **Rode o gate antes de discutir estilo:** `bash scripts/check-tf.sh .` — `0` passa · `1`
-   reprova · `2` **nada para verificar** (que não é aprovação). Funciona sem `tofu`/`terraform`.
-2. **Escolha a ferramenta** (`references/ferramenta.md`): OpenTofu por default, Terraform por ADR.
+   reprova · `2` **nada para verificar** (que não é aprovação). Funciona sem `tofu`/`terraform`
+   e detecta qual dos dois o repo usa (lock/registry, `*.tofu`, workflow) para aplicar as regras certas.
+2. **Escolha a ferramenta do repo** (`references/ferramenta.md`): OpenTofu ou Terraform, por critério
+   objetivo e sem ADR obrigatório; registre no README. Nos exemplos, `$TF` = `tofu` ou `terraform`.
 3. **Estruture e isole** (`references/estrutura.md`, `references/state.md`): raiz por ambiente e por
    stack, state remoto com lock e criptografia.
 4. **Fixe tudo** (`references/versoes-e-modulos.md`): CLI, providers, lock multiplataforma; módulo
@@ -88,28 +90,32 @@ Mapa de references:
 
 | Tarefa | Reference |
 |---|---|
-| OpenTofu vs Terraform: licença, a política da casa, diferenças que mudam o desenho, migração | `references/ferramenta.md` |
+| OpenTofu vs Terraform: critérios de escolha (licença, criptografia, features, registry, HCP, suporte), diferenças que mudam o desenho, migração | `references/ferramenta.md` |
 | Layout (envs/ + modules/), por que workspace NÃO separa hml de prd, stacks e blast radius, bootstrap | `references/estrutura.md` |
 | Backend, lock, criptografia (servidor e cliente), separação por ambiente, operação do state | `references/state.md` |
 | `required_version`, providers com pin, `.terraform.lock.hcl` multiplataforma, contrato de módulo | `references/versoes-e-modulos.md` |
 | Segredo fora do state: `ephemeral`, `*_wo`, cofre, OIDC, o que fazer se vazou | `references/segredos.md` |
 | plan -> revisão -> apply gated, break-glass, drift, `moved`/`import`/`removed`, lifecycle | `references/fluxo.md` |
-| fmt, validate, tflint, checkov/trivy, `tofu test`, terratest, OPA/conftest, infracost, tags | `references/qualidade.md` |
+| fmt, validate, tflint, checkov/trivy, `tofu test`/`terraform test`, terratest, OPA/conftest, infracost, tags | `references/qualidade.md` |
 | Hetzner, Cloudflare, GitHub, AWS: exemplos curtos e validados | `references/providers.md` |
 | Versões, recursos por versão, SHAs de actions, o que foi executado (anexo volátil) | `references/stack-versoes.md` |
 
 Assets prontos: `assets/repo-skeleton/` (envs/hml, envs/prd, modules/servidor com teste, lock files
-reais) · `assets/backend/` (S3, S3-compatível, criptografia OpenTofu) · `assets/lint/.tflint.hcl` ·
+reais) · `assets/repo-skeleton-terraform/` (locks do registry do Terraform) · `assets/backend/` (S3, S3-compatível, criptografia OpenTofu) · `assets/lint/.tflint.hcl` ·
 `assets/policy/` (Rego + teste) · `assets/ci/github-actions-terraform.yml` e `github-actions-drift.yml`
-(actions pinadas por SHA).
+(parametrizados por `TF_TOOL`, actions pinadas por SHA).
 
 ## Pisos inegociáveis (vetam o atalho)
 
-1. **OpenTofu por default; Terraform só por ADR.** Uma ferramenta por repositório.
+1. **OpenTofu e Terraform são cidadãos de primeira classe: sem default, sem ADR obrigatório.**
+   A escolha é por repo (README/ADR do projeto, critérios em `references/ferramenta.md`). **UMA
+   ferramenta por repositório** (o lock carrega o registry), nunca misturar.
 2. **Raiz por ambiente, nunca `workspace` para separar hml de prd.** Workspace compartilha backend,
    credencial e código; separa só o nome do state.
-3. **State remoto, com lock, versionado e criptografado**, um por ambiente e por stack. Backend
-   local em código de ambiente é vetado. Nunca `*.tfstate` ou `*.tfplan` no git.
+3. **State remoto, com lock, versionado e criptografado**, um por ambiente e por stack. **State em
+   claro é vetado nas duas**: OpenTofu com `encryption { ... enforced = true }`; Terraform com backend
+   de criptografia server-side + KMS e acesso restrito. Backend local em código de ambiente é vetado.
+   Nunca `*.tfstate` ou `*.tfplan` no git.
 4. **`required_version` e `required_providers` com `version`** (raiz: `~>` ou intervalo fechado),
    **`.terraform.lock.hcl` commitado** com hashes de **todas** as plataformas.
 5. **Módulo é API:** variáveis com `type`, `description` e `validation`; saídas mínimas; segredo
@@ -126,7 +132,7 @@ reais) · `assets/backend/` (S3, S3-compatível, criptografia OpenTofu) · `asse
 11. **Tags/labels obrigatórias** (`env`, `owner`, `project`, `managed_by`) em tudo que aceita,
     validadas no módulo e na política do plan.
 12. **Qualidade em degraus que travam:** `fmt`, `validate`, `check-tf.sh`, `tflint`, `checkov`/`trivy`,
-    `tofu test`, `conftest` — nesta ordem, no CI. Exceção só com motivo escrito.
+    `$TF test`, `conftest` — nesta ordem, no CI. Exceção só com motivo escrito.
 13. **Efeito externo nunca sai de não-produção** também em IaC (`schematize-infra → references/iac-efeitos-externos.md`).
 14. <!-- herdado:engineering/orquestracao:curto -->**Orquestrador não desenvolve; subagent barato executa.** O agent principal só planeja, despacha e revisa; ação onerosa vira micro-tasks para o executor mais barato que resolve: `haiku` (mecânico) / `sonnet` (código; falhou → mesmo subagent corrige, até 2 rodadas) → Codex `gpt-5.6-terra` → Cursor → subagent `opus` (motivo) → `park`; **visual vai direto ao Codex**; **imagem nunca pelo Claude: detectar Codex/Gemini e perguntar ao usuário qual usar (Codex é a sugestão), nunca API de imagem paga**; papéis em `agentes.toml`. No overdev, cada item do checklist vai a um subagent e o principal revisa antes do `- [x]`. **Sem frota ociosa:** idle com pendência volta ao trabalho; dependente de outro agent → mata e enfileira com gatilho; terminou → mata (§9.6). Detalhe: `schematize-engineering` → `references/orquestracao.md` §9.<!-- /herdado -->
 

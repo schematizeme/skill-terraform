@@ -47,6 +47,24 @@ resource "hcloud_firewall" "fw" {
   name = "fw"
 }
 FIX
+  f "$1/encryption.tofu" <<'FIX'
+terraform {
+  encryption {
+    key_provider "aws_kms" "estado" {
+      kms_key_id = "alias/tofu-state"
+      region     = "us-east-1"
+      key_spec   = "AES_256"
+    }
+    method "aes_gcm" "estado" {
+      keys = key_provider.aws_kms.estado
+    }
+    state {
+      method   = method.aes_gcm.estado
+      enforced = true
+    }
+  }
+}
+FIX
   f "$1/.terraform.lock.hcl" <<'FIX'
 provider "registry.opentofu.org/hetznercloud/hcloud" {
   version     = "1.70.0"
@@ -397,6 +415,207 @@ f envs/prd/x.tf <<'FIX'
 // api_token = "idem"
 FIX
 esperar 0 "no piso"
+
+# ---- paridade OpenTofu x Terraform: detecção e regras por ramo ----
+# raiz_tf <subdir> [s3extra]: raiz Terraform (registry.terraform.io) com backend s3 + lock multiplataforma.
+raiz_tf() {
+  f "$1/main.tf" <<FIX
+terraform {
+  required_version = ">= 1.9.0, < 2.0.0"
+  backend "s3" {
+    bucket       = "b"
+    key          = "k"
+    region       = "us-east-1"
+    ${2:-encrypt      = true
+    kms_key_id   = "alias/tfstate"}
+    use_lockfile = true
+  }
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.70"
+    }
+  }
+}
+provider "hcloud" {}
+resource "hcloud_firewall" "fw" {
+  name = "fw"
+}
+FIX
+  f "$1/.terraform.lock.hcl" <<'FIX'
+provider "registry.terraform.io/hetznercloud/hcloud" {
+  version     = "1.70.0"
+  constraints = "~> 1.70"
+  hashes = [
+    "h1:aaaa",
+    "h1:bbbb",
+    "zh:cccc",
+  ]
+}
+FIX
+}
+
+echo "== ramo OpenTofu =="
+novo tofu-sem-encryption; raiz_boa envs/prd; rm "$D/envs/prd/encryption.tofu"
+esperar 1 "tofu-sem-criptografia"
+
+novo tofu-encryption-sem-enforced; raiz_boa envs/prd
+f envs/prd/encryption.tofu <<'FIX'
+terraform {
+  encryption {
+    key_provider "aws_kms" "estado" {
+      kms_key_id = "alias/tofu-state"
+      region     = "us-east-1"
+      key_spec   = "AES_256"
+    }
+    method "aes_gcm" "estado" {
+      keys = key_provider.aws_kms.estado
+    }
+    state {
+      method = method.aes_gcm.estado
+    }
+  }
+}
+FIX
+esperar 1 "tofu-criptografia-sem-enforced"
+
+novo tofu-encryption-so-em-comentario; raiz_boa envs/prd; rm "$D/envs/prd/encryption.tofu"
+f envs/prd/x.tf <<'FIX'
+terraform {
+  # encryption { state { enforced = true } }
+}
+FIX
+esperar 1 "tofu-sem-criptografia"
+
+novo tofu-waiver-encryption-por-env; raiz_boa envs/prd; rm "$D/envs/prd/encryption.tofu"
+f envs/prd/ci.tf <<'FIX'
+# tf-ok: tofu-sem-criptografia chave vem de TF_ENCRYPTION no CI (secret do environment)
+FIX
+esperar 0 "no piso"
+
+novo tofu-so-arquivo-tofu; mkdir -p "$D/envs/prd"
+f envs/prd/main.tofu <<'FIX'
+terraform {
+  required_version = ">= 1.9.0"
+  backend "local" {}
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.70"
+    }
+  }
+}
+FIX
+esperar 1 "backend-local"
+
+echo "== ramo Terraform =="
+novo terraform-verde; raiz_tf envs/prd
+esperar 0 "no piso"
+
+novo terraform-s3-sem-kms; raiz_tf envs/prd 'encrypt      = true'
+esperar 1 "terraform-state-sem-kms"
+
+novo terraform-s3-sem-encrypt; raiz_tf envs/prd 'kms_key_id   = "alias/x"'
+esperar 1 "terraform-state-sem-kms"
+
+novo terraform-s3-compativel-com-waiver; raiz_tf envs/prd 'skip_credentials_validation = true'
+f envs/prd/state.tf <<'FIX'
+# tf-ok: terraform-state-sem-kms R2 cifra em repouso (AES-256 do provedor); acesso só pelo token do CI
+FIX
+esperar 0 "no piso"
+
+novo terraform-gcs-sem-cmek; raiz_tf envs/prd
+f envs/prd/main.tf <<'FIX'
+terraform {
+  required_version = ">= 1.9.0"
+  backend "gcs" {
+    bucket = "b"
+  }
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.70"
+    }
+  }
+}
+provider "hcloud" {}
+FIX
+esperar 1 "terraform-state-sem-kms"
+
+novo terraform-com-encryption-do-tofu; raiz_tf envs/prd
+f envs/prd/encryption.tf <<'FIX'
+terraform {
+  encryption {
+    state {
+      enforced = true
+    }
+  }
+}
+FIX
+esperar 1 "ferramenta-mista"
+
+echo "== ferramenta: mista, indefinida, workflow =="
+novo mista-dois-locks; raiz_boa envs/hml; raiz_tf envs/prd
+esperar 1 "ferramenta-mista"
+
+novo mista-lock-terraform-com-tofutest; raiz_tf envs/prd
+f envs/prd/tests/x.tofutest.hcl <<'FIX'
+run "x" {
+  command = plan
+}
+FIX
+esperar 1 "ferramenta-mista"
+
+novo mista-lock-terraform-workflow-opentofu; raiz_tf envs/prd
+f .github/workflows/ci.yml <<'FIX'
+jobs:
+  x:
+    steps:
+      - uses: opentofu/setup-opentofu@abc
+FIX
+esperar 1 "ferramenta-mista"
+
+novo workflow-parametrizado-terraform; raiz_tf envs/prd
+f .github/workflows/ci.yml <<'FIX'
+env:
+  TF_TOOL: terraform
+jobs:
+  x:
+    steps:
+      - uses: opentofu/setup-opentofu@abc
+        if: env.TF_TOOL == 'tofu'
+      - uses: hashicorp/setup-terraform@abc
+        if: env.TF_TOOL == 'terraform'
+FIX
+esperar 0 "no piso"
+
+novo workflow-comentario-nao-conta; raiz_boa envs/prd
+f .github/workflows/ci.yml <<'FIX'
+# para Terraform troque por hashicorp/setup-terraform e rode terraform init
+jobs:
+  x:
+    steps:
+      - uses: opentofu/setup-opentofu@abc
+FIX
+esperar 0 "no piso"
+
+novo marcador-declara-terraform-contra-lock-tofu; raiz_boa envs/prd
+f envs/prd/ferramenta.tf <<'FIX'
+# tf-tool: terraform
+FIX
+esperar 1 "ferramenta-mista"
+
+novo mista-com-waiver-de-migracao; raiz_boa envs/hml; raiz_tf envs/prd
+f envs/prd/migracao.tf <<'FIX'
+# tf-ok: ferramenta-mista migração hml->terraform em andamento, ADR-0007, prazo 2026-11
+FIX
+esperar 0 "no piso"
+
+novo sem-sinal-de-ferramenta; raiz_boa envs/prd; rm "$D/envs/prd/.terraform.lock.hcl" "$D/envs/prd/encryption.tofu"
+f envs/prd/ferramenta.tf <<'FIX'
+# tf-ok: lock-ausente lock será gerado no primeiro init (caso de teste)
+FIX
+esperar 0 "ferramenta-indefinida"
 
 echo
 echo "check-tf.test: $ok ok, $fail falha(s)"

@@ -20,8 +20,9 @@ Waiver: `# tf-ok: <motivo>` (linha ou bloco) e `# tf-ok: <regra> <motivo>` (dire
 
 Depois, **se as ferramentas existirem** (diga quais faltaram, não finja):
 ```bash
-tofu fmt -check -recursive          # ou terraform
-for d in envs/*/; do (cd "$d" && tofu init -backend=false -input=false && tofu validate); done
+TF=tofu   # ou: TF=terraform — a ferramenta do repo (lock, README, workflow)
+$TF fmt -check -recursive
+for d in envs/*/; do (cd "$d" && $TF init -backend=false -input=false && $TF validate); done
 tflint --recursive --config "$PWD/.tflint.hcl"
 checkov -d . --framework terraform --quiet --compact   # ou: trivy config .
 conftest verify --policy policy/                       # a política tem teste
@@ -35,7 +36,7 @@ conftest verify --policy policy/                       # a política tem teste
 - **Credencial:** plan com leitura, apply com escrita, OIDC, nada de chave estática; token do
   provider por variável de ambiente, não por `var`.
 - **Segredo no state:** quais atributos persistem o segredo? Há `ephemeral`/`*_wo` disponível no
-  provider? O state do OpenTofu está cifrado (`enforced`)?
+  provider? State cifrado? OpenTofu: `encryption {}` com `enforced`; Terraform: backend com `encrypt` + `kms_key_id` e acesso restrito. Só uma ferramenta no repo?
 - **Módulo:** `validation` rejeita o perigoso? default seguro? saída mínima? versão pinada ao consumir?
 - **Destrutivo:** todo `prevent_destroy` onde há dado? `for_each` com chave estável?
 - **Fluxo:** o CI aplica plan salvo? há *environment* com revisores em prd? alguém consegue

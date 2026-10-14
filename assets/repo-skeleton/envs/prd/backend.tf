@@ -7,6 +7,7 @@ terraform {
     key          = "prd/core.tfstate"
     region       = "us-east-1"
     encrypt      = true
-    use_lockfile = true # lock nativo do S3 (dynamodb_table está deprecado)
+    kms_key_id   = "alias/tfstate-prd" # SSE-KMS: obrigatório no Terraform (sem criptografia de cliente); no OpenTofu soma-se ao encryption.tofu
+    use_lockfile = true                # lock nativo do S3 (dynamodb_table está deprecado)
   }
 }

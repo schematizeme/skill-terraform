@@ -11,7 +11,9 @@
    (`backend-ausente`, `backend-local`).
 2. **Lock obrigatório.** Dois `apply` concorrentes corrompem o state. Lock nativo do backend.
 3. **Versionamento do objeto de state.** Permite voltar a um state anterior depois de um erro.
-4. **Criptografia em repouso** (server-side) **e**, no OpenTofu, **no cliente** (§4).
+4. **Criptografia em repouso, em claro vetado nas duas ferramentas**: OpenTofu cifra **no cliente**
+   (§4) além do server-side; Terraform exige **server-side com KMS** e acesso restrito (§4.1). O gate
+   reprova (`tofu-sem-criptografia`, `terraform-state-sem-kms`).
 5. **Um state por ambiente e por stack** (blast radius, §5), com credencial separada para prd.
 6. **State e plan nunca no git** (`*.tfstate`, `*.tfplan` no `.gitignore`; o gate reprova se
    versionado: `state-versionado`).
@@ -56,10 +58,10 @@ Todo atributo que o provider devolve entra no state **em claro**: senha gerada, 
 `tls_private_key`, `secret_string` do Secrets Manager, token de `hcloud_server` com `user_data`.
 `sensitive = true` **só esconde da saída do terminal** — não tira do state nem do plan.
 Mitigações, em ordem de força: (1) **não pôr o segredo no state** (`ephemeral` + argumentos
-`*_wo`, `references/segredos.md`); (2) **cifrar o state no cliente** (OpenTofu, §4); (3) cifrar no
-servidor e restringir acesso.
+`*_wo`, `references/segredos.md`); (2) **cifrar o state no cliente** (só OpenTofu, §4); (3) cifrar no
+servidor com KMS e restringir acesso (a única opção do Terraform, §4.1).
 
-## 4. Criptografia nativa do OpenTofu (state e plan)
+## 4. OpenTofu: criptografia nativa do state e do plan
 
 OpenTofu 1.7+ cifra state e plan **antes** de enviar ao backend (AES-GCM; chave de KMS/OpenBao/
 GCP KMS/PBKDF2 ou programa externo). Efeito: um bucket exposto por engano entrega só texto cifrado.
@@ -87,7 +89,24 @@ terraform {
 - **Migração**: para ligar, use `fallback { method = ... }`/método `unencrypted` por uma rodada;
   depois remova e ponha `enforced = true`. Não existe no Terraform; migrar para lá exige
   descriptografar antes.
-- Exemplo completo: `assets/backend/encryption-opentofu.tf.example`.
+- Exemplo completo: `assets/backend/encryption-opentofu.tf.example`. Coloque o bloco em
+  `encryption.tofu` (o Terraform ignora `*.tofu`; o esqueleto faz assim).
+
+### 4.1 Terraform: criptografia server-side + KMS (não há criptografia de cliente)
+
+O Terraform grava o state como veio; a proteção é do **backend**. O piso (gate
+`terraform-state-sem-kms`):
+
+- **S3**: `encrypt = true` **e** `kms_key_id = "alias/..."` (SSE-KMS, chave própria por ambiente;
+  quem lê o state precisa de permissão na chave); bucket versionado, sem acesso público, política
+  negando acesso sem TLS. Exemplo: `assets/backend/s3.tf.example`.
+- **GCS**: `kms_encryption_key` (CMEK). **Azure**: Storage Account com chave gerenciada pelo cliente
+  (o gate não prova, revise). **HCP Terraform** (`cloud {}`): o state é cifrado pelo serviço.
+- **S3-compatível sem KMS** (Hetzner, R2, MinIO): o provedor cifra em repouso, mas sem chave sua;
+  aceite só com waiver `# tf-ok: terraform-state-sem-kms <motivo>` que diga quem acessa o bucket,
+  e prefira cofre/ephemeral para que o segredo nem entre no state.
+- Compense a falta de criptografia de cliente: **segredo fora do state** (`ephemeral` + `*_wo`),
+  acesso mínimo ao bucket e à chave, log de acesso ligado, plan salvo em artefato de retenção curta.
 
 ## 5. Separação por ambiente e blast radius
 

@@ -1,7 +1,7 @@
-# schematize-terraform
+# schematize-terraform — IaC com OpenTofu e Terraform
 
-> **O state é a memória da infra e o plan é o contrato.** IaC declarativa em **OpenTofu**
-> (default, MPL) e **Terraform** (por ADR, BUSL): raízes por ambiente, state remoto com lock e
+> **O state é a memória da infra e o plan é o contrato.** IaC declarativa em **OpenTofu e
+> Terraform**, em paridade (uma ferramenta por repo, escolhida por critério objetivo): raízes por ambiente, state remoto com lock e
 > criptografia, providers e lock file fixados, módulos como API, segredo fora do state, plan salvo
 > com apply gated, drift agendado, testes e política como código.
 
@@ -37,9 +37,9 @@ bash /tmp/skill-terraform/install.sh .        # instala em .claude/ do projeto a
 - **references/** — `ferramenta` (OpenTofu vs Terraform), `estrutura`, `state`, `versoes-e-modulos`,
   `segredos`, `fluxo`, `qualidade`, `providers` (Hetzner, Cloudflare, GitHub, AWS) e `stack-versoes`
   (anexo volátil com data, fontes e o que foi executado).
-- **scripts/** — `check-tf.sh`, o gate estático (funciona **sem** `tofu`/`terraform`; waiver
-  rastreável `# tf-ok:`), e `check-tf.test.sh` (29 casos, vermelhos plantados).
-- **assets/** — `repo-skeleton/` (envs/hml, envs/prd, modules/servidor com teste e lock files reais),
+- **scripts/** — `check-tf.sh`, o gate estático (funciona **sem** `tofu`/`terraform`, detecta qual o repo usa e aplica as regras certas; waiver
+  rastreável `# tf-ok:`), e `check-tf.test.sh` (48 casos, vermelhos plantados).
+- **assets/** — `repo-skeleton/` (envs/hml, envs/prd, modules/servidor com teste e lock files reais; `encryption.tofu` só para OpenTofu) e `repo-skeleton-terraform/` (locks do registry do Terraform),
   `backend/` (S3, S3-compatível, criptografia do OpenTofu), `lint/.tflint.hcl`, `policy/` (Rego +
   teste), `ci/` (workflow de IaC e de drift, actions pinadas por SHA), `commands/`, `CLAUDE.md`.
 

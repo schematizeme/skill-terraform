@@ -3,6 +3,22 @@
 Todas as mudanças relevantes deste pacote, no formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 com versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.2.0] — 2026-10-14
+Paridade OpenTofu/Terraform. Antes a skill dizia "OpenTofu por default, Terraform por ADR (BUSL)"; a decisão
+passou a ser que os dois são cidadãos de primeira classe, escolhidos por projeto com critério objetivo.
+
+### Alterado
+- Piso 1 (SKILL, `assets/CLAUDE.md`): sem default e sem ADR obrigatório; **uma** ferramenta por repo, nunca misturar; state em claro vetado nas duas (OpenTofu com `encryption` enforced; Terraform com backend server-side + KMS e acesso restrito).
+- `references/ferramenta.md` reescrita: tabela de critérios (licença MPL x BUSL e o que implica, criptografia nativa só no OpenTofu, features exclusivas, registry/providers, HCP Terraform/Stacks, suporte comercial), convenção `*.tofu`/`*.tofutest.hcl` e migração nos dois sentidos.
+- Comandos, exemplos e references passam a `$TF` (`tofu` ou `terraform`); `state.md` ganha §4.1 (Terraform: SSE-KMS/CMEK).
+- Description e title explicitam "OpenTofu e Terraform" (gatilhos `*.tf`, `*.tofu`, `tofu`, `terraform`, `.terraform.lock.hcl`); nome do pacote e prefixo `tf-` mantidos.
+- Esqueleto: `encryption.tofu` por env (o Terraform ignora `*.tofu`) e `kms_key_id` no backend S3; `assets/repo-skeleton-terraform/` traz os locks do registry do Terraform (5 plataformas). Validado com OpenTofu 1.13.1 e Terraform 1.16.5.
+- CI e drift de referência parametrizados por `TF_TOOL` (`setup-opentofu` ou `setup-terraform`, ambos pinados por SHA verificado com `gh api`).
+
+### Adicionado
+- `check-tf.sh` detecta a ferramenta (lock/registry, `*.tofu`, `*.tofutest.hcl`, bloco `encryption{}`, workflow/`TF_TOOL`, `# tf-tool:`, `TF_GATE_TOOL`) e aplica o ramo certo: `tofu-sem-criptografia`, `tofu-criptografia-sem-enforced`, `terraform-state-sem-kms`, `ferramenta-mista`, `ferramenta-indefinida` (aviso). Reconhece `*.tofu`.
+- `check-tf.test.sh`: 48 casos (19 novos, vermelhos plantados nos dois ramos, mista, workflow, waiver).
+
 ## [0.1.1] — 2026-10-14
 Integração ao catálogo (grafo, skills.json, herdados) e correção do texto de precedência herdado.
 

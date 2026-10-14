@@ -13,9 +13,9 @@ blocos (`references/fluxo.md` §5).
    - **Renomear/mover** (recurso para módulo, módulo para outro nome) -> bloco `moved { from, to }`.
    - **Soltar do state sem destruir** -> bloco `removed { from = ..., lifecycle { destroy = false } }`.
 2. **Escreva o recurso** no HCL com os atributos reais. Para adotar, opcionalmente gere o esqueleto:
-   `tofu plan -generate-config-out=gerado.tf` e **revise** (traz atributos computados e pode
+   (`$TF` = `tofu` ou `terraform`, o do repo.) `$TF plan -generate-config-out=gerado.tf` e **revise** (traz atributos computados e pode
    conter segredo) antes de incorporar.
-3. **Plan:** `tofu plan -out=plano.tfplan` deve mostrar `will be imported` / `has moved` /
+3. **Plan:** `$TF plan -out=plano.tfplan` deve mostrar `will be imported` / `has moved` /
    `will be removed from state` e **zero destroy, zero replace**. Qualquer destroy: pare e entenda.
 4. **PR com o plan** (`/tf-plan`), revisão, apply pelo CI.
 5. **Depois:** mantenha `moved` por um ciclo de releases se o módulo é compartilhado; remova

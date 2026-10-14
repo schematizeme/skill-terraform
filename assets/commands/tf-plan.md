@@ -14,13 +14,13 @@ Alvo: `envs/${ARGUMENTS}` (ex.: `envs/hml`). **Este comando NÃO aplica.** `appl
 3. **Plan salvo:**
    ```bash
    cd envs/<ambiente>
-   tofu init -input=false
-   tofu plan -input=false -lock-timeout=5m -var-file=<ambiente>.tfvars -out=plano.tfplan
-   tofu show -no-color plano.tfplan > plano.txt
-   tofu show -json plano.tfplan > plano.json
+   $TF init -input=false
+   $TF plan -input=false -lock-timeout=5m -var-file=<ambiente>.tfvars -out=plano.tfplan
+   $TF show -no-color plano.tfplan > plano.txt
+   $TF show -json plano.tfplan > plano.json
    conftest test --policy ../../policy plano.json
    ```
-   (`terraform` onde a ADR mandar.) `plano.tfplan` e `plano.json` podem conter segredo: não
+   (`$TF` = `tofu` ou `terraform`, o do repo: lock/README/workflow.) `plano.tfplan` e `plano.json` podem conter segredo: não
    commite, não cole em chat/issue sem filtrar.
 4. **Leia nesta ordem** e escreva o resumo (`references/fluxo.md` §2):
    - totais: add / change / **destroy**;

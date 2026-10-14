@@ -22,6 +22,10 @@
 | Infracost | 0.10.46 | `infracost/infracost` | cobertura de provedores: <!-- reverificar --> |
 | Terratest | módulo `modules/core/v2.0.0` | `gruntwork-io/terratest` | opcional |
 
+Plataforma (2026-10-14): o HashiConf 2025 anunciou **Stacks em GA** no HCP Terraform (fonte: blog da
+HashiCorp; arquivos `*.tfcomponent.hcl`). Fim do free tier do HCP em 2026-03 aparece em comparativos de
+terceiros: <!-- reverificar -->. `terraform query` e `actions` constam no CHANGELOG do Terraform 1.14+.
+
 Contexto institucional (não verificado nesta rodada): a HashiCorp foi adquirida pela IBM, e o
 OpenTofu é projeto da Linux Foundation, com relato de ingresso na CNCF em 2025.
 <!-- reverificar: datas e estágio na CNCF -->
@@ -68,6 +72,8 @@ OpenTofu é projeto da Linux Foundation, com relato de ingresso na CNCF em 2025.
 | `terraform-linters/setup-tflint` | v6.3.2 | `6ffdbaa3be476b3431f7275c26966ef32ff60337` |
 | `hashicorp/setup-terraform` | v4.0.1 | `dfe3c3f87815947d99a8997f908cb6525fc44e9e` |
 
+Os dois `setup-*` entram nos workflows de `assets/ci/` sob `if: env.TF_TOOL == ...` (paridade).
+
 Tag anotada foi desreferenciada até o commit. Renovação: refaça `gh api repos/<r>/git/ref/tags/<tag>`.
 
 ## O que foi EXECUTADO para escrever esta skill (2026-10-14, Linux amd64)
@@ -81,6 +87,11 @@ Tag anotada foi desreferenciada até o commit. Renovação: refaça `gh api repo
 - Criptografia do OpenTofu: state **e** plan saíram cifrados (provedor `pbkdf2`, `enforced = true`;
   `grep` do valor em claro devolveu 0). Provedor `aws_kms`: apenas **validado** (sem conta AWS).
 - `conftest verify` em `assets/policy` (3 testes) e `conftest test` em plan JSON fabricado.
+- **Paridade (2026-10-14)**: esqueleto validado com as DUAS CLIs: OpenTofu 1.13.1 (`init -backend=false`,
+  `validate`, `fmt -check`, `test` com 3 passes; com `encryption.tofu`) e Terraform 1.16.5 (esqueleto sem
+  os `*.tofu`, lock regerado em `assets/repo-skeleton-terraform/` com 5 plataformas, `validate`, `fmt -check`,
+  `test` com 3 passes). `check-tf.sh` passa nos dois ramos; 48 casos em `check-tf.test.sh`.
+  Workflows de `assets/ci/` parseados como YAML e o gate detecta `TF_TOOL` nos dois valores.
 - Exemplos de `providers.md` (hcloud, cloudflare, github, aws) e de `segredos.md` (`ephemeral` +
   `password_wo`) passam em `tofu validate`; o de segredos também em `terraform validate`.
 

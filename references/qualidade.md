@@ -1,17 +1,19 @@
 # Qualidade: formato, estática, teste, política, custo, tags
 
+> `$TF` = o binário do repo: `tofu` ou `terraform` (uma só por repo). Tudo abaixo vale para os dois.
+
 > Cada degrau pega uma classe diferente de erro. Nenhum substitui a leitura do `plan`.
 
 ## 1. Os degraus (ordem do CI)
 
 | # | Ferramenta | Pega | Precisa de credencial? | Trava o merge? |
 |---|---|---|---|---|
-| 1 | `tofu fmt -check -recursive` | estilo | não | sim |
-| 2 | `tofu init -backend=false && tofu validate` | sintaxe, tipos, referências | não | sim |
+| 1 | `$TF fmt -check -recursive` | estilo | não | sim |
+| 2 | `$TF init -backend=false && $TF validate` | sintaxe, tipos, referências | não | sim |
 | 3 | `scripts/check-tf.sh` (esta skill) | backend local, provider solto, lock, segredo, state versionado, crítico sem `prevent_destroy` | não | sim |
 | 4 | `tflint` | convenção, variável sem descrição, módulo sem pin, regras do provider | não | sim |
 | 5 | `checkov` / `trivy config` | má configuração de segurança (bucket público, SG aberto, sem criptografia) | não | sim (HIGH/CRITICAL) |
-| 6 | `tofu test` | contrato do módulo | não (mock) | sim |
+| 6 | `$TF test` | contrato do módulo | não (mock) | sim |
 | 7 | `plan` + `conftest` | política da casa sobre o plan real | leitura | sim |
 | 8 | `infracost` (opcional) | custo | leitura | aviso |
 
@@ -26,11 +28,13 @@
 
 ## 3. Testes
 
-### 3.1 Nativo (`terraform test` / `tofu test`)
+### 3.1 Nativo (`tofu test` / `terraform test`)
 Arquivo `tests/*.tftest.hcl` ao lado do módulo. Três usos:
 
 - **`command = plan` + `assert`**: valida lógica (locals, labels, validações) sem criar nada.
 - **`expect_failures`**: prova que a `validation` **rejeita** o que deve. É o "vermelho primeiro" do módulo.
+- Arquivos: `*.tftest.hcl` roda nas duas ferramentas; `*.tofutest.hcl` é só do OpenTofu (o Terraform
+  ignora) — use para teste que exercita recurso exclusivo.
 - **`mock_provider`**: roda sem credencial nem rede (Terraform 1.7+, OpenTofu 1.7+). Cuidado: o
   mock inventa valores (ids aleatórios em string) — use `mock_resource`/`defaults` quando o tipo importa.
 - **`command = apply`** (real) só em conta/projeto de teste descartável, com `terraform test`
@@ -65,7 +69,7 @@ O que o linter não sabe é o que **a casa** exige: tags obrigatórias, regiões
 tipos proibidos, "destroy de recurso crítico exige aprovação nomeada". Rego sobre o JSON do plan:
 
 ```bash
-tofu plan -out=plano.tfplan && tofu show -json plano.tfplan > plano.json
+$TF plan -out=plano.tfplan && $TF show -json plano.tfplan > plano.json
 conftest test --policy policy/ plano.json
 ```
 
@@ -93,6 +97,6 @@ Sem tag, não há dono; sem dono, não há quem responda no incidente nem quem p
 
 ## 8. Documentação
 
-ADR para: escolha Terraform vs OpenTofu, backend e chave de criptografia, divisão de stacks,
+ADR (quando a decisão custou debate) para: escolha OpenTofu vs Terraform, backend e chave de criptografia, divisão de stacks,
 adoção de Terragrunt. Runbook para: bootstrap do state, restauro de state, rotação de chave,
 break-glass (`schematize-docs`).

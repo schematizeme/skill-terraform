@@ -9,14 +9,14 @@ PR  ->  fmt/validate/tflint/checkov/policy  ->  plan SALVO (artefato)  ->  revis
 
 Pisos:
 1. **`plan` antes de `apply`, sempre**, e o plan que se revisa é o plan que se aplica.
-2. **Plan salvo como artefato**: `tofu plan -out=plano.tfplan`; o `apply` consome **esse arquivo**
-   (`tofu apply plano.tfplan`). Sem `-auto-approve` em plan recalculado: entre o plan e o apply o
+2. **Plan salvo como artefato**: `$TF plan -out=plano.tfplan`; o `apply` consome **esse arquivo**
+   (`$TF apply plano.tfplan`). Sem `-auto-approve` em plan recalculado: entre o plan e o apply o
    mundo pode ter mudado, e o apply recalculado aplica algo que ninguém leu. Plan aplicado de
    state obsoleto é **recusado** pela ferramenta (isso é desejado).
 3. **Apply de prd só pelo CI**, no *environment* protegido (revisores obrigatórios, só `main`).
    **Nunca `apply` local em prd.** Nem "só dessa vez". Emergência = break-glass (§3).
 4. **hml antes de prd**, mesmo código. O que passou em hml sem ninguém olhar não prova nada em prd.
-5. **Plan salvo é segredo em potencial**: retenção curta, repo privado, `encryption.plan` no OpenTofu.
+5. **Plan salvo é segredo em potencial**: retenção curta, repo privado; `encryption.plan` (enforced) no OpenTofu, e no Terraform acesso mínimo ao artefato (não há criptografia de plan).
 6. **Um apply por vez por ambiente** (`concurrency` no CI sem cancelar no meio + lock do state).
 
 ## 2. Como se lê um plan (rito, `/tf-plan`)

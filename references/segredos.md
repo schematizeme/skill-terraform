@@ -11,7 +11,7 @@
 | `password = "..."` no `.tf` ou valor no `.tfvars` commitado | entra no git para sempre | gate `segredo-literal`; valor vem do ambiente/cofre |
 | `default = "..."` em variável de segredo | idem, e vira o valor "oficial" | proibido (`segredo-literal`) |
 | Segredo no **state** | todo atributo do provider vai em claro para o state | `ephemeral`/write-only; criptografia do state; acesso mínimo |
-| Segredo no **plan** salvo (artefato do CI) | o plan contém os valores | retenção curta, repo privado, `encryption.plan` (OpenTofu) |
+| Segredo no **plan** salvo (artefato do CI) | o plan contém os valores | retenção curta, repo privado; OpenTofu: `encryption.plan` (enforced); Terraform: acesso mínimo ao artefato |
 | Segredo em **log** do CI | `TF_LOG=trace`, `-var` em argumento, `output` sem `sensitive` | `sensitive`, mascarar, nunca `-var 'x=segredo'` |
 
 `sensitive = true` **não protege o state**: só oculta do terminal e do plan renderizado.
@@ -31,7 +31,7 @@
 ## 3. Efêmero e write-only (verificar a versão antes)
 
 Disponível em: **Terraform 1.10** (valores e recursos efêmeros) e **1.11** (argumentos write-only);
-**OpenTofu 1.11** (ambos). Fonte e data em `stack-versoes.md`.
+**OpenTofu 1.11** (ambos); vale para as duas ferramentas. Fonte e data em `stack-versoes.md`.
 
 ```hcl
 # 1) lê o segredo do cofre: efêmero, não vai ao state
@@ -67,7 +67,7 @@ data "vault_kv_secret_v2" "db" {      # ou aws_secretsmanager_secret_version, et
   mount = "kv"
   name  = "prd/db"
 }
-# data_json é sensível e FICA NO STATE: criptografe o state (OpenTofu) e limite o acesso.
+# data_json é sensível e FICA NO STATE: criptografe o state (OpenTofu: `encryption`; Terraform: backend com KMS) e limite o acesso.
 ```
 Nunca "traga" o segredo para uma variável de entrada só para repassá-lo: leia direto do cofre
 (menos um lugar onde o valor passa).

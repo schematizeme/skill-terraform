@@ -5,8 +5,9 @@
 #   - "hml" e "prd": credencial de ESCRITA + "Required reviewers" (prd: 2 pessoas, sem auto-aprovação)
 #     + "Deployment branches: main". É essa proteção que impede apply sem humano.
 # Autenticação: OIDC (id-token: write), nunca chave estática. Ajuste o passo "Credencial".
-# Ferramenta: OpenTofu por default. Para Terraform (ADR), troque o passo de setup por
-# hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e (v4.0.1) e `tofu` por `terraform`.
+# Ferramenta: OpenTofu e Terraform têm paridade. UMA escolha por repo, num lugar só: TF_TOOL abaixo
+# (tofu | terraform), a mesma do README/ADR do projeto. Os dois passos de setup têm `if:`; todos os
+# comandos usam "$TF_TOOL". O gate check-tf.sh lê TF_TOOL para saber qual ramo de regras aplicar.
 name: terraform
 on:
   pull_request:
@@ -25,7 +26,9 @@ permissions:
   contents: read
 
 env:
+  TF_TOOL: tofu # tofu | terraform  <- a escolha do repo (lock file e backend têm de bater)
   TOFU_VERSION: "1.13.1" # igual ao required_version dos envs; suba em PR próprio
+  TERRAFORM_VERSION: "1.16.5"
   CHECKOV_VERSION: "3.3.29"
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
@@ -36,15 +39,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        if: env.TF_TOOL == 'tofu'
         with:
           tofu_version: ${{ env.TOFU_VERSION }}
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: env.TF_TOOL == 'terraform'
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
       - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
       - name: fmt
-        run: tofu fmt -check -recursive -diff
+        run: $TF_TOOL fmt -check -recursive -diff
       - name: validate (sem backend, sem credencial)
         run: |
           for d in envs/*/; do
-            (cd "$d" && tofu init -backend=false -input=false >/dev/null && tofu validate)
+            (cd "$d" && "$TF_TOOL" init -backend=false -input=false >/dev/null && "$TF_TOOL" validate)
           done
       - name: gate da casa (backend, pin, lock, segredo, state)
         # copie scripts/check-tf.sh da skill para tools/check-tf.sh do repo
@@ -57,10 +65,10 @@ jobs:
         run: |
           python3 -m pip install --quiet "checkov==${CHECKOV_VERSION}"
           checkov -d . --framework terraform --quiet --compact
-      - name: tofu test (módulos)
+      - name: test (módulos, nativo)
         run: |
           for m in modules/*/; do
-            if [ -d "$m/tests" ]; then (cd "$m" && tofu init -backend=false -input=false >/dev/null && tofu test); fi
+            if [ -d "$m/tests" ]; then (cd "$m" && "$TF_TOOL" init -backend=false -input=false >/dev/null && "$TF_TOOL" test); fi
           done
 
   plan:
@@ -81,27 +89,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        if: env.TF_TOOL == 'tofu'
         with:
           tofu_version: ${{ env.TOFU_VERSION }}
           tofu_wrapper: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: env.TF_TOOL == 'terraform'
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
       - name: Credencial (OIDC, somente leitura)
         run: echo "troque por aws-actions/configure-aws-credentials (pinada por SHA) ou equivalente do seu cloud"
       - name: init
-        run: tofu init -input=false
+        run: $TF_TOOL init -input=false
       - name: plan (salvo)
-        run: tofu plan -input=false -lock-timeout=5m -var-file="${{ matrix.env }}.tfvars" -out=plano.tfplan -detailed-exitcode || [ $? -eq 2 ]
+        run: $TF_TOOL plan -input=false -lock-timeout=5m -var-file="${{ matrix.env }}.tfvars" -out=plano.tfplan -detailed-exitcode || [ $? -eq 2 ]
       - name: plan em JSON + política (conftest)
         run: |
-          tofu show -json plano.tfplan > plano.json
+          "$TF_TOOL" show -json plano.tfplan > plano.json
           curl -fsSL -o /tmp/conftest.tgz "https://github.com/open-policy-agent/conftest/releases/download/v0.71.1/conftest_0.71.1_Linux_x86_64.tar.gz"
           echo "c3f6b2a753bd56e377a1e51a95ae3e057f926f2e9139f7d5b5dfbbaf810f7985  /tmp/conftest.tgz" | sha256sum -c -
           tar -xzf /tmp/conftest.tgz -C /tmp conftest
           /tmp/conftest test --policy ../../policy plano.json
       - name: plan legível no resumo do job (revisão humana)
-        run: tofu show -no-color plano.tfplan >> "$GITHUB_STEP_SUMMARY"
+        run: $TF_TOOL show -no-color plano.tfplan >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          # o plan pode conter segredo: retenção curta; com OpenTofu, use encryption.plan (enforced)
+          # o plan pode conter segredo: retenção curta; com OpenTofu, encryption.plan (enforced); com Terraform, repo privado e acesso mínimo ao artefato
           name: plano-${{ matrix.env }}-${{ github.sha }}
           path: envs/${{ matrix.env }}/plano.tfplan
           retention-days: 7
@@ -121,9 +135,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        if: env.TF_TOOL == 'tofu'
         with:
           tofu_version: ${{ env.TOFU_VERSION }}
           tofu_wrapper: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: env.TF_TOOL == 'terraform'
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: plano-hml-${{ github.sha }}
@@ -131,9 +151,9 @@ jobs:
       - name: Credencial (OIDC, escrita)
         run: echo "troque pelo seu cloud"
       - name: init
-        run: tofu init -input=false
+        run: $TF_TOOL init -input=false
       - name: apply SOMENTE do plan salvo (se o state mudou, o plan é recusado como obsoleto)
-        run: tofu apply -input=false -lock-timeout=5m plano.tfplan
+        run: $TF_TOOL apply -input=false -lock-timeout=5m plano.tfplan
 
   apply-prd:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -149,9 +169,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        if: env.TF_TOOL == 'tofu'
         with:
           tofu_version: ${{ env.TOFU_VERSION }}
           tofu_wrapper: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: env.TF_TOOL == 'terraform'
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: plano-prd-${{ github.sha }}
@@ -159,6 +185,6 @@ jobs:
       - name: Credencial (OIDC, escrita)
         run: echo "troque pelo seu cloud"
       - name: init
-        run: tofu init -input=false
+        run: $TF_TOOL init -input=false
       - name: apply SOMENTE do plan aprovado
-        run: tofu apply -input=false -lock-timeout=5m plano.tfplan
+        run: $TF_TOOL apply -input=false -lock-timeout=5m plano.tfplan

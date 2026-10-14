@@ -10,10 +10,17 @@
 # Saída: achados `arquivo:linha: [ERRO|AVISO regra] mensagem`.
 #        exit 0 passa · 1 reprova · 2 NADA para verificar (não é aprovação).
 #
-# Regras (id): backend-ausente · backend-local · required-version · provider-sem-pin ·
+# Ferramenta: OpenTofu e Terraform têm paridade. O gate DETECTA qual o repo usa (lock file/registry,
+#   *.tofu e *.tofutest.hcl, bloco encryption{}, workflow, `# tf-tool: tofu|terraform` ou TF_GATE_TOOL)
+#   e aplica as regras do ramo certo. Sinais dos dois lados no mesmo repo = ferramenta-mista.
+#
+# Regras (id): ferramenta-mista · ferramenta-indefinida · tofu-sem-criptografia ·
+#   tofu-criptografia-sem-enforced · terraform-state-sem-kms · backend-ausente · backend-local · required-version · provider-sem-pin ·
 #   provider-sem-teto · lock-ausente · lock-sem-multiplataforma · segredo-literal ·
 #   state-versionado · critico-sem-prevent-destroy · provider-em-modulo · variavel-sensivel ·
 #   output-sensivel.
+# Ramo OpenTofu: raiz com backend exige terraform { encryption { ... state { enforced = true } } }.
+# Ramo Terraform: backend s3 exige encrypt = true + kms_key_id; gcs exige kms_encryption_key.
 # Waiver rastreável: `# tf-ok: <motivo>` na linha ou na de cima (regras de linha/bloco);
 #   `# tf-ok: <regra-id> <motivo>` em qualquer .tf do diretório (regras de diretório).
 set -euo pipefail
@@ -61,6 +68,12 @@ function fecha_bloco(   i, n, linhas, l, rp, depth2, pname, pbody, pstart, ptxt)
   if (btype == "terraform") {
     meta("tem_terraform")
     if (btxt ~ /required_version[ \t]*=/) meta("required_version")
+    sc = btxt; gsub(/(^|\n)[ \t]*(#|\/\/)[^\n]*/, "\n", sc)
+    if (sc ~ /encryption[ \t]*\{/) meta("encryption")
+    if (sc ~ /enforced[ \t]*=[ \t]*true/) meta("enforced")
+    if (match(sc, /backend[ \t]+"[a-z0-9_]+"/)) { bt = substr(sc, RSTART, RLENGTH); sub(/^backend[ \t]+"/, "", bt); sub(/"$/, "", bt); meta("backend_tipo_" bt) }
+    if (sc ~ /backend[ \t]+"[a-z0-9_]+"/ && sc ~ /encrypt[ \t]*=[ \t]*true/) meta("backend_encrypt")
+    if (sc ~ /(kms_key_id|kms_encryption_key)[ \t]*=/) meta("backend_kms")
     if (btxt ~ /backend[ \t]+"local"/) meta("backend_local")
     else if (btxt ~ /backend[ \t]+"[a-z0-9_]+"/) meta("backend_remoto")
     if (btxt ~ /required_providers[ \t]*\{/) meta("required_providers")
@@ -136,21 +149,21 @@ BEGIN { depth = 0; btype = "" }
 LISTA="$(mktemp)"
 trap 'rm -f "$ACHADOS" "$LISTA"' EXIT INT TERM
 find "$RAIZ" \( -name .git -o -name .terraform -o -name node_modules -o -name versions \) -prune -o \
-  -type f \( -name '*.tf' -o -name '*.tfvars' \) -print | LC_ALL=C sort >"$LISTA"
+  -type f \( -name '*.tf' -o -name '*.tofu' -o -name '*.tfvars' \) -print | LC_ALL=C sort >"$LISTA"
 
 if [ ! -s "$LISTA" ]; then
-  echo "check-tf: nenhum .tf/.tfvars em '$RAIZ' — nada para verificar (exit 2, não é aprovação)" >&2
+  echo "check-tf: nenhum .tf/.tofu/.tfvars em '$RAIZ' — nada para verificar (exit 2, não é aprovação)" >&2
   exit 2
 fi
 
 eh_modulo() { case "/$1/" in */modules/*) return 0 ;; *) return 1 ;; esac }
 
 # --- por diretório ------------------------------------------------------------------
-DIRS="$(while IFS= read -r f; do case "$f" in *.tf) dirname "$f" ;; esac; done <"$LISTA" | LC_ALL=C sort -u)"
+DIRS="$(while IFS= read -r f; do case "$f" in *.tf|*.tofu) dirname "$f" ;; esac; done <"$LISTA" | LC_ALL=C sort -u)"
 
 dir_waived() { # dir_waived <dir> <regra>
   local d="$1" r="$2" f
-  for f in "$d"/*.tf; do
+  for f in "$d"/*.tf "$d"/*.tofu; do
     [ -e "$f" ] || continue
     grep -qE "tf-ok:[[:space:]]*$r([[:space:]]|\$)" "$f" && return 0
   done
@@ -175,6 +188,57 @@ meta_dir() { # meta_dir <dir> <chave> -> 0 se algum .tf do dir emitiu a chave
     END { exit !achou }' "$ACHADOS.raw.$$"
 }
 
+# --- ferramenta: detecta OpenTofu x Terraform e confere a unicidade ----------------------------
+EV_TOFU=(); EV_TF=()
+while IFS= read -r l; do
+  [ -n "$l" ] || continue
+  if grep -q 'registry\.opentofu\.org/' "$l"; then EV_TOFU+=("$l (registry.opentofu.org)"); fi
+  if grep -q 'registry\.terraform\.io/' "$l"; then EV_TF+=("$l (registry.terraform.io)"); fi
+done < <(find "$RAIZ" \( -name .git -o -name .terraform -o -name node_modules -o -name versions \) -prune -o -type f -name .terraform.lock.hcl -print | LC_ALL=C sort)
+while IFS= read -r l; do
+  [ -n "$l" ] && EV_TOFU+=("$l (arquivo exclusivo do OpenTofu)")
+done < <(find "$RAIZ" \( -name .git -o -name .terraform -o -name node_modules -o -name versions \) -prune -o -type f \( -name '*.tofu' -o -name '*.tofutest.hcl' \) -print | LC_ALL=C sort)
+enc="$(awk -F'\t' '$1 == "META" && $2 == "encryption" { print $3; exit }' "$ACHADOS.raw.$$")"
+[ -z "$enc" ] || EV_TOFU+=("$enc (bloco encryption{}: só existe no OpenTofu)")
+decl="$(printf '%s\n' "${TF_GATE_TOOL:-}" | grep -E '^(tofu|opentofu|terraform)$' || true)"
+if [ -n "$decl" ]; then
+  case "$decl" in terraform) EV_TF+=("TF_GATE_TOOL=terraform") ;; *) EV_TOFU+=("TF_GATE_TOOL=$decl") ;; esac
+fi
+while IFS=: read -r arq _ nome; do
+  [ -n "$arq" ] || continue
+  case "$nome" in terraform) EV_TF+=("$arq (# tf-tool: terraform)") ;; *) EV_TOFU+=("$arq (# tf-tool: $nome)") ;; esac
+done < <(grep -rEoH --include='*.tf' --include='*.tofu' 'tf-tool:[[:space:]]*(tofu|opentofu|terraform)' "$RAIZ" 2>/dev/null | sed -E 's/tf-tool:[[:space:]]*/x:/' | LC_ALL=C sort -u || true)
+# workflows de CI (no RAIZ e na raiz do repo git)
+WFD="$RAIZ/.github/workflows"
+if TOPO_WF="$(git -C "$RAIZ" rev-parse --show-toplevel 2>/dev/null)"; then WFD="$WFD $TOPO_WF/.github/workflows"; fi
+for wd in $WFD; do
+  [ -d "$wd" ] || continue
+  for wf in "$wd"/*.yml "$wd"/*.yaml; do
+    [ -e "$wf" ] || continue
+    txt="$(grep -vE '^[[:space:]]*#' "$wf" || true)"
+    pt="$(grep -oE '^[[:space:]]*TF_TOOL:[[:space:]]*"?(tofu|terraform)' <<<"$txt" | head -1 | sed -E 's/.*(tofu|terraform)$/\1/' || true)"
+    if [ -n "$pt" ]; then
+      if [ "$pt" = tofu ]; then EV_TOFU+=("$wf (TF_TOOL: tofu)"); else EV_TF+=("$wf (TF_TOOL: terraform)"); fi
+    else
+      if grep -qE 'setup-opentofu|(^|[^A-Za-z0-9_-])tofu[[:space:]]+(init|plan|apply|validate|fmt|test|show|providers)' <<<"$txt"; then EV_TOFU+=("$wf (workflow usa tofu)"); fi
+      if grep -qE 'setup-terraform|(^|[^A-Za-z0-9_-])terraform[[:space:]]+(init|plan|apply|validate|fmt|test|show|providers)' <<<"$txt"; then EV_TF+=("$wf (workflow usa terraform)"); fi
+    fi
+  done
+done
+
+FERR=""
+if [ "${#EV_TOFU[@]}" -gt 0 ] && [ "${#EV_TF[@]}" -gt 0 ]; then
+  mista_ok=0
+  while IFS= read -r d; do [ -n "$d" ] && dir_waived "$d" ferramenta-mista && mista_ok=1; done <<<"$DIRS"
+  if [ "$mista_ok" = 0 ]; then
+    emit "$RAIZ" 1 ERRO ferramenta-mista "sinais de OpenTofu E de Terraform no mesmo repo (uma ferramenta por repo; o lock carrega o registry). OpenTofu: ${EV_TOFU[0]}; Terraform: ${EV_TF[0]}"
+  fi
+elif [ "${#EV_TOFU[@]}" -gt 0 ]; then FERR=tofu
+elif [ "${#EV_TF[@]}" -gt 0 ]; then FERR=terraform
+else
+  emit "$RAIZ" 1 AVISO ferramenta-indefinida "não deu para detectar a ferramenta (sem lock, *.tofu, workflow, TF_TOOL ou '# tf-tool: tofu|terraform'): as regras de state por ferramenta foram puladas"
+fi
+
 while IFS= read -r d; do
   [ -n "$d" ] || continue
   mod=0; eh_modulo "$d" && mod=1
@@ -185,9 +249,27 @@ while IFS= read -r d; do
     fi
     if meta_dir "$d" backend_local; then
       dir_waived "$d" backend-local || {
-        linha="$(grep -n 'backend[[:space:]]*"local"' "$d"/*.tf 2>/dev/null | head -1 | cut -d: -f1-2 || true)"
+        linha="$(grep -n 'backend[[:space:]]*"local"' "$d"/*.tf "$d"/*.tofu 2>/dev/null | head -1 | cut -d: -f1-2 || true)"
         emit "$d" "${linha:-1}" ERRO backend-local "backend \"local\" em código de ambiente: state em disco de laptop/CI não tem lock nem time"
       }
+    fi
+  fi
+  if [ "$mod" = 0 ]; then
+    if meta_dir "$d" backend_remoto && [ "$FERR" = tofu ]; then
+      if ! meta_dir "$d" encryption; then
+        dir_waived "$d" tofu-sem-criptografia || emit "$d" 1 ERRO tofu-sem-criptografia "OpenTofu com backend remoto e sem terraform { encryption { ... } }: state/plan em claro no backend. Declare key_provider + method e state/plan { enforced = true } (chave via TF_ENCRYPTION no CI: waiver com motivo)"
+      elif ! meta_dir "$d" enforced; then
+        dir_waived "$d" tofu-criptografia-sem-enforced || emit "$d" 1 ERRO tofu-criptografia-sem-enforced "encryption{} sem enforced = true: o OpenTofu aceitaria ler/gravar state em claro"
+      fi
+    fi
+    if meta_dir "$d" backend_remoto && [ "$FERR" = terraform ]; then
+      if meta_dir "$d" backend_tipo_s3 && { ! meta_dir "$d" backend_encrypt || ! meta_dir "$d" backend_kms; }; then
+        dir_waived "$d" terraform-state-sem-kms || emit "$d" 1 ERRO terraform-state-sem-kms "Terraform sem criptografia nativa de state: backend s3 exige encrypt = true E kms_key_id (SSE-KMS), com acesso restrito à chave. S3-compatível sem KMS: waiver com motivo"
+      elif meta_dir "$d" backend_tipo_gcs && ! meta_dir "$d" backend_kms; then
+        dir_waived "$d" terraform-state-sem-kms || emit "$d" 1 ERRO terraform-state-sem-kms "backend gcs sem kms_encryption_key (CMEK): Terraform não cifra o state no cliente"
+      elif ! meta_dir "$d" backend_tipo_s3 && ! meta_dir "$d" backend_tipo_gcs && ! meta_dir "$d" backend_tipo_azurerm && ! meta_dir "$d" backend_tipo_cloud && ! meta_dir "$d" backend_tipo_remote; then
+        emit "$d" 1 AVISO terraform-state-sem-kms "backend de tipo não verificado pelo gate: confirme criptografia server-side com chave gerenciada e acesso restrito"
+      fi
     fi
   fi
   if ! meta_dir "$d" required_version; then

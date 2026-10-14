@@ -34,7 +34,7 @@ no mirror não bate o hash).
 plataforma) falha com "provider checksum mismatch" ou reescreve o lock. Gere para todas:
 
 ```bash
-tofu providers lock \
+$TF providers lock \
   -platform=linux_amd64 -platform=linux_arm64 \
   -platform=darwin_amd64 -platform=darwin_arm64 \
   -platform=windows_amd64
@@ -44,7 +44,7 @@ O gate exige **≥ 2 hashes `h1:`** por provider (`lock-sem-multiplataforma`). C
 no meio de outra mudança.
 
 ### 1.4 Atualizar
-PR dedicado: sobe a constraint, `tofu init -upgrade`, `providers lock` multiplataforma, `plan`
+PR dedicado: sobe a constraint, `$TF init -upgrade`, `providers lock` multiplataforma, `plan`
 **vazio** (ou só o diff esperado) em hml, `plan` em prd. Leia o changelog do provider: major
 costuma renomear recurso (ex.: Cloudflare v4→v5 trocou `cloudflare_record` por `cloudflare_dns_record`).
 Bots (Renovate/Dependabot) abrem o PR; a regra de revisão é a mesma.
@@ -110,5 +110,5 @@ histórico. Para recurso simples, o recurso direto é mais claro que o módulo g
 
 ### 2.7 Documentação e teste
 README com exemplo de uso, tabela de entradas/saídas (gerada: `terraform-docs`) e a nota de
-ferramenta (se usa recurso exclusivo de OpenTofu). Teste nativo em `tests/*.tftest.hcl` com
+ferramenta (se usa recurso exclusivo de uma das ferramentas, p. ex. `enabled`/`encryption` do OpenTofu). Teste nativo em `tests/*.tftest.hcl` com
 `mock_provider` (`references/qualidade.md` §3).
