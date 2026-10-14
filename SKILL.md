@@ -3,7 +3,8 @@ name: schematize-terraform
 metadata:
   version: 0.1.0
 description: >-
-  IaC declarativa com OpenTofu/Terraform: raízes por ambiente, state remoto com lock e criptografia, pins e lock file, módulos, segredos, plan->apply gated, drift, testes e política. Use ao tocar *.tf, *.tfvars, state, módulo, plan/apply. Gate check-tf.sh.
+  IaC com OpenTofu/Terraform: raízes por ambiente, state remoto com lock e criptografia, pins, módulos, segredos,
+  plan->apply gated, drift, testes e política. Use ao tocar *.tf, *.tfvars, state ou módulo. Gate check-tf.sh.
 ---
 <!-- cross-skill: isolamento.md, iac.md, iac-efeitos-externos.md, resiliencia.md, segredos.md -> schematize-infra -->
 
