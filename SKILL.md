@@ -1,7 +1,7 @@
 ---
 name: schematize-terraform
 metadata:
-  version: 0.1.1
+  version: 0.2.0
 description: >-
   IaC com OpenTofu e Terraform em paridade (uma ferramenta por repo): state cifrado, pins, módulos, plan->apply gated, drift. Use ao tocar *.tf, *.tofu, tofu, terraform, .terraform.lock.hcl ou state. Gate check-tf.sh.
 ---
@@ -16,7 +16,7 @@ lê, ou deixa o ambiente de produção a um `workspace select` de distância do 
 comando do incidente. Esta skill é a especialista de IaC; a `schematize-infra` é a visão de
 plataforma.
 
-**Versão:** skill `schematize-terraform` v0.1.1. Changelog em `CHANGELOG.md`.
+**Versão:** skill `schematize-terraform` v0.2.0. Changelog em `CHANGELOG.md`.
 
 ## Precedência e herança (leia antes de divergir)
 
